@@ -1,0 +1,7 @@
+{
+  "name": "UIDAI Data Management System",
+  "description": "A comprehensive government portal for centralized forecasting, stress analysis, and resource scheduling of identity infrastructure.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
