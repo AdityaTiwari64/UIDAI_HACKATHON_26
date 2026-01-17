@@ -4,12 +4,12 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Forecasting from './pages/Forecasting';
 import Dataset from './pages/Dataset';
+import StressIndex from './pages/StressIndex';
+import Scheduling from './pages/Scheduling';
+import About from './pages/About';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import { Page } from './types';
-
-// Placeholder for other pages
-const StressIndex = () => <div className="p-8"><h1 className="text-2xl font-bold">System Stress Index Analysis (TBD)</h1></div>;
-const Scheduling = () => <div className="p-8"><h1 className="text-2xl font-bold">Resource & Task Scheduling (TBD)</h1></div>;
-const About = () => <div className="p-8"><h1 className="text-2xl font-bold">About & System Information (TBD)</h1></div>;
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.HOME);
@@ -22,6 +22,8 @@ const App: React.FC = () => {
       case Page.SCHEDULING: return <Scheduling />;
       case Page.DATASET: return <Dataset />;
       case Page.ABOUT: return <About />;
+      case Page.PROFILE: return <Profile />;
+      case Page.SETTINGS: return <Settings />;
       default: return <Dashboard />;
     }
   };
@@ -34,6 +36,8 @@ const App: React.FC = () => {
       case Page.SCHEDULING: return 'Resource & Task Scheduling';
       case Page.DATASET: return 'Dataset Management';
       case Page.ABOUT: return 'About & System Information';
+      case Page.PROFILE: return 'User Profile';
+      case Page.SETTINGS: return 'Settings';
       default: return 'Data Portal';
     }
   };
@@ -41,7 +45,7 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-background-light dark:bg-background-dark">
       <Sidebar currentPage={currentPage} setPage={setCurrentPage} />
-      
+
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-surface-light dark:bg-surface-dark border-b border-gray-200 dark:border-gray-800 h-16 flex items-center justify-between px-8 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -59,17 +63,20 @@ const App: React.FC = () => {
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                 <span className="material-symbols-outlined text-lg">search</span>
               </span>
-              <input 
-                className="pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-full bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" 
-                placeholder={`Search ${currentPage}...`} 
-                type="text" 
+              <input
+                className="pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-full bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                placeholder={`Search ${currentPage}...`}
+                type="text"
               />
             </div>
             <button className="relative p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-white transition-colors">
               <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full"></span>
             </button>
-            <button className="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-white transition-colors">
+            <button
+              onClick={() => setCurrentPage(Page.SETTINGS)}
+              className="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-white transition-colors"
+            >
               <span className="material-symbols-outlined">settings</span>
             </button>
             {currentPage === Page.DATASET && (

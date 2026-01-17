@@ -5,7 +5,9 @@ export enum Page {
   FORECASTING = 'forecasting',
   SCHEDULING = 'scheduling',
   DATASET = 'dataset',
-  ABOUT = 'about'
+  ABOUT = 'about',
+  PROFILE = 'profile',
+  SETTINGS = 'settings'
 }
 
 export interface StatCardProps {
