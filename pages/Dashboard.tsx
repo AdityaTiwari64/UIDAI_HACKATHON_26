@@ -1,20 +1,70 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import StatCard from '../components/StatCard';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-
-const data = [
-  { name: 'Mon', value: 40 },
-  { name: 'Tue', value: 55 },
-  { name: 'Wed', value: 70 },
-  { name: 'Thu', value: 85 },
-  { name: 'Fri', value: 92 },
-  { name: 'Sat', value: 60 },
-  { name: 'Sun', value: 45 },
-  { name: 'Mon', value: 30 },
-];
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
+import {
+  fetchMetadata,
+  fetchStateAggregate,
+  type MetadataResponse,
+  type AggregateResponse
+} from '../services/apiService';
 
 const Dashboard: React.FC = () => {
+  const [metadata, setMetadata] = useState<MetadataResponse | null>(null);
+  const [selectedState, setSelectedState] = useState<string>('');
+  const [aggregate, setAggregate] = useState<AggregateResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load metadata on mount
+  useEffect(() => {
+    const loadMetadata = async () => {
+      try {
+        const data = await fetchMetadata();
+        setMetadata(data);
+        if (data.states.length > 0) {
+          setSelectedState(data.states[0]);
+        }
+      } catch (error) {
+        console.error('Error loading metadata:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadMetadata();
+  }, []);
+
+  // Load aggregate when state changes
+  useEffect(() => {
+    const loadAggregate = async () => {
+      if (!selectedState) return;
+      setIsLoading(true);
+      try {
+        const data = await fetchStateAggregate(selectedState);
+        setAggregate(data);
+      } catch (error) {
+        console.error('Error loading aggregate:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (selectedState) {
+      loadAggregate();
+    }
+  }, [selectedState]);
+
+  // Transform aggregate data for chart
+  const stressChartData = aggregate?.all_districts.slice(0, 8).map((d, i) => ({
+    name: d.district.length > 8 ? d.district.substring(0, 8) + '...' : d.district,
+    value: d.asi
+  })) || [];
+
+  // Workload composition data
+  const workloadData = aggregate ? [
+    { name: 'Biometric', value: aggregate.workload.biometric },
+    { name: 'Child', value: aggregate.workload.child },
+    { name: 'Demographic', value: aggregate.workload.demographic }
+  ] : [];
+
   return (
     <div className="flex flex-col flex-1 overflow-y-auto">
       {/* Animated Geometric Header */}
@@ -57,20 +107,32 @@ const Dashboard: React.FC = () => {
             <h2 className="text-4xl font-bold text-white mb-3 font-display drop-shadow-lg">UIDAI Data Management System</h2>
             <p className="text-blue-100 text-lg leading-relaxed">Centralized forecasting, stress analysis, and resource scheduling for national identity infrastructure.</p>
 
-            {/* Quick stats inline */}
-            <div className="flex gap-6 mt-6">
+            {/* State Selector */}
+            <div className="flex gap-6 mt-6 items-center">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">verified</span>
-                <span className="text-white/80 text-sm">99.98% Uptime</span>
+                <span className="material-symbols-outlined text-secondary">location_on</span>
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm backdrop-blur-sm"
+                >
+                  {metadata?.states.map((state) => (
+                    <option key={state} value={state} className="text-gray-800">{state}</option>
+                  ))}
+                </select>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">speed</span>
-                <span className="text-white/80 text-sm">85M+ Daily Requests</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">security</span>
-                <span className="text-white/80 text-sm">Enterprise Security</span>
-              </div>
+              {aggregate && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-secondary">speed</span>
+                    <span className="text-white/80 text-sm">ASI: {aggregate.average.asi.toFixed(1)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-secondary">warning</span>
+                    <span className="text-white/80 text-sm">AERS: {(aggregate.average.aers * 100).toFixed(1)}%</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -97,10 +159,36 @@ const Dashboard: React.FC = () => {
 
       <div className="p-8 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard label="Total Enrolments" value="1.38 Billion" trend="+0.4% this month" icon="people" colorClass="blue" trendUp />
-          <StatCard label="Auth Transactions" value="85.2 Million" trend="Daily Average" icon="verified_user" colorClass="purple" trendUp />
-          <StatCard label="Server Uptime" value="99.98%" trend="Last 30 Days" icon="dns" colorClass="green" />
-          <StatCard label="Pending Schedules" value="12" trend="Action Required" icon="pending_actions" colorClass="yellow" isActionable />
+          <StatCard
+            label="State Average ASI"
+            value={aggregate ? aggregate.average.asi.toFixed(1) : '--'}
+            trend={aggregate ? `${aggregate.districts_count} districts` : 'Loading'}
+            icon="speed"
+            colorClass="blue"
+            trendUp={aggregate ? aggregate.average.asi > 60 : false}
+          />
+          <StatCard
+            label="Exclusion Risk (AERS)"
+            value={aggregate ? `${(aggregate.average.aers * 100).toFixed(1)}%` : '--'}
+            trend={aggregate?.average.aers > 0.5 ? 'High Risk' : 'Normal'}
+            icon="warning"
+            colorClass={aggregate?.average.aers > 0.5 ? 'yellow' : 'green'}
+            trendUp={aggregate ? aggregate.average.aers > 0.3 : false}
+          />
+          <StatCard
+            label="MBU Ratio"
+            value={aggregate ? `${(aggregate.average.mbu * 100).toFixed(1)}%` : '--'}
+            trend="Minor Biometric Usage"
+            icon="child_care"
+            colorClass="purple"
+          />
+          <StatCard
+            label="Districts Analyzed"
+            value={aggregate ? aggregate.districts_count.toString() : '--'}
+            trend={aggregate?.month || 'Loading'}
+            icon="location_city"
+            colorClass="green"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -108,62 +196,85 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <span className="material-icons-outlined text-primary dark:text-blue-400">show_chart</span>
-                System Stress Index Forecast
+                District Stress Index Comparison
+                {isLoading && <span className="material-symbols-outlined animate-spin text-sm">sync</span>}
               </h3>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Day</button>
-                <button className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-white">Week</button>
-                <button className="px-3 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Month</button>
+              <div className="text-xs text-gray-500">
+                {aggregate?.month} • {selectedState}
               </div>
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                  <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.value > 90 ? '#b48d3e' : '#bfdbfe'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {stressChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stressChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} domain={[0, 100]} />
+                    <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {stressChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.value > 75 ? '#ef4444' : entry.value > 50 ? '#eab308' : '#22c55e'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  Loading district data...
+                </div>
+              )}
             </div>
           </div>
 
           <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
             <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
-              <span className="material-icons-outlined text-primary dark:text-blue-400">event</span>
-              Upcoming Schedules
+              <span className="material-icons-outlined text-primary dark:text-blue-400">analytics</span>
+              Top Risk Districts
             </h3>
-            <div className="space-y-6">
-              {[
-                { date: 'Oct 24', title: 'Database Maintenance', desc: 'Downtime: 02:00 - 04:00 IST', status: 'Pending', statusColor: 'yellow' },
-                { date: 'Oct 26', title: 'Security Audit Report', desc: 'Regional Center North', status: 'Confirmed', statusColor: 'green' },
-                { date: 'Oct 28', title: 'Model Retraining', desc: 'Forecasting Module V.2.1', status: '', statusColor: '' }
-              ].map((item, i) => (
-                <div key={i} className="flex gap-4 items-start">
-                  <div className="flex flex-col items-center min-w-[3rem]">
-                    <span className="text-[10px] font-bold text-gray-500 uppercase">{item.date.split(' ')[0]}</span>
-                    <span className="text-xl font-bold text-gray-800 dark:text-white">{item.date.split(' ')[1]}</span>
+            <div className="space-y-4">
+              {aggregate?.top_districts.slice(0, 5).map((district, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${i === 0 ? 'bg-red-500' : i === 1 ? 'bg-orange-500' : i === 2 ? 'bg-yellow-500' : 'bg-gray-400'
+                      }`}>
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white">{district.district}</p>
+                      <p className="text-xs text-gray-500">AERS: {(district.aers * 100).toFixed(1)}%</p>
+                    </div>
                   </div>
-                  <div className={`flex-1 ${i < 2 ? 'pb-4 border-b border-gray-100 dark:border-gray-800' : ''}`}>
-                    <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{item.title}</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.desc}</p>
-                    {item.status && (
-                      <span className={`inline-block mt-2 px-2 py-0.5 bg-${item.statusColor}-100 dark:bg-${item.statusColor}-900/30 text-${item.statusColor}-800 dark:text-${item.statusColor}-200 text-[10px] font-bold rounded uppercase`}>
-                        {item.status}
-                      </span>
-                    )}
+                  <div className={`text-lg font-bold ${district.asi > 75 ? 'text-red-500' : district.asi > 50 ? 'text-yellow-500' : 'text-green-500'
+                    }`}>
+                    {district.asi.toFixed(0)}
                   </div>
                 </div>
-              ))}
+              )) || (
+                  <div className="text-center text-gray-400 py-8">Loading...</div>
+                )}
             </div>
-            <button className="w-full mt-6 py-2 text-sm text-primary dark:text-blue-400 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 rounded transition-colors">
-              View Full Calendar
-            </button>
+          </div>
+        </div>
+
+        {/* Workload Composition */}
+        <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
+            <span className="material-icons-outlined text-primary dark:text-blue-400">pie_chart</span>
+            State Workload Composition
+          </h3>
+          <div className="grid grid-cols-3 gap-6">
+            {workloadData.map((item, i) => (
+              <div key={i} className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-3 ${i === 0 ? 'bg-blue-100 text-blue-600' : i === 1 ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'
+                  }`}>
+                  <span className="material-symbols-outlined text-2xl">
+                    {i === 0 ? 'fingerprint' : i === 1 ? 'child_care' : 'person'}
+                  </span>
+                </div>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{item.value.toLocaleString()}</p>
+                <p className="text-sm text-gray-500">{item.name} Load</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>

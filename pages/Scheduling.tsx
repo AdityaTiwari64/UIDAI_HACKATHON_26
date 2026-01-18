@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Task } from '../types';
+import { fetchRiskPrediction, getPriorityFromAERS, DEFAULT_PREDICTION_INPUT, type RiskPrediction } from '../services/apiService';
 
 const INITIAL_TASKS: Task[] = [
     { id: 'SCH-001', title: 'Database Maintenance Window', description: 'Perform routine maintenance on primary database cluster including index optimization and log cleanup.', date: '2023-10-24', priority: 'High', status: 'Pending' },
@@ -16,6 +17,63 @@ const Scheduling: React.FC = () => {
     const [selectedView, setSelectedView] = useState<'list' | 'calendar'>('list');
     const [filterPriority, setFilterPriority] = useState<string>('All');
     const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+
+    // ML Model State
+    const [prediction, setPrediction] = useState<RiskPrediction | null>(null);
+    const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
+    const [mlPriorityEnabled, setMlPriorityEnabled] = useState(true);
+
+    // Fetch ML prediction on mount to determine priorities
+    useEffect(() => {
+        const fetchPrediction = async () => {
+            setIsLoadingPrediction(true);
+            try {
+                const result = await fetchRiskPrediction(DEFAULT_PREDICTION_INPUT);
+                setPrediction(result);
+
+                // Update task priorities based on AERS
+                if (mlPriorityEnabled) {
+                    updateTaskPriorities(result.aers);
+                }
+            } catch (error) {
+                console.error('Failed to fetch prediction for scheduling:', error);
+            }
+            setIsLoadingPrediction(false);
+        };
+        fetchPrediction();
+    }, []);
+
+    // Function to update task priorities based on AERS
+    const updateTaskPriorities = (aers: number) => {
+        const mlPriority = getPriorityFromAERS(aers);
+
+        setTasks(prevTasks => prevTasks.map(task => {
+            // Only update pending tasks - confirmed/completed keep their priority
+            if (task.status === 'Pending') {
+                // Higher AERS means higher priority for critical infrastructure tasks
+                const isCriticalTask = task.title.toLowerCase().includes('database') ||
+                    task.title.toLowerCase().includes('security') ||
+                    task.title.toLowerCase().includes('migration');
+
+                if (isCriticalTask && aers > 0.5) {
+                    return { ...task, priority: 'High' };
+                } else if (aers > 0.7) {
+                    return { ...task, priority: mlPriority };
+                }
+            }
+            return task;
+        }));
+    };
+
+    // Toggle ML priority adjustment
+    const toggleMlPriority = () => {
+        setMlPriorityEnabled(!mlPriorityEnabled);
+        if (!mlPriorityEnabled && prediction) {
+            updateTaskPriorities(prediction.aers);
+        } else {
+            setTasks(INITIAL_TASKS); // Reset to original priorities
+        }
+    };
 
     const getPriorityColor = (priority: string) => {
         switch (priority) {
@@ -60,13 +118,51 @@ const Scheduling: React.FC = () => {
                 </div>
             </div>
 
+            {/* ML Risk Score Banner */}
+            {prediction && (
+                <div className={`mb-6 rounded-xl shadow-sm border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${prediction.aers > 0.7 ? 'bg-red-50 border-red-200' :
+                        prediction.aers > 0.3 ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-green-50 border-green-200'
+                    }`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${prediction.aers > 0.7 ? 'bg-red-100 text-red-600' :
+                                prediction.aers > 0.3 ? 'bg-yellow-100 text-yellow-600' :
+                                    'bg-green-100 text-green-600'
+                            }`}>
+                            <span className="material-symbols-outlined">smart_toy</span>
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-gray-800">ML Risk Assessment</p>
+                            <p className="text-xs text-gray-600">
+                                AERS: <span className="font-bold">{(prediction.aers * 100).toFixed(1)}%</span> |
+                                ASI: <span className="font-bold">{prediction.asi.toFixed(1)}</span> |
+                                Recommended Priority: <span className={`font-bold ${getPriorityFromAERS(prediction.aers) === 'High' ? 'text-red-600' : getPriorityFromAERS(prediction.aers) === 'Medium' ? 'text-yellow-600' : 'text-green-600'}`}>
+                                    {getPriorityFromAERS(prediction.aers)}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <span className="text-xs text-gray-600">Auto-adjust priorities</span>
+                            <div
+                                onClick={toggleMlPriority}
+                                className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${mlPriorityEnabled ? 'bg-primary' : 'bg-gray-300'}`}
+                            >
+                                <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${mlPriorityEnabled ? 'translate-x-5' : ''}`}></div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 {[
                     { label: 'Total Scheduled', value: tasks.length.toString(), icon: 'event', color: 'blue' },
                     { label: 'Pending Approval', value: tasks.filter(t => t.status === 'Pending').length.toString(), icon: 'pending', color: 'yellow' },
                     { label: 'Confirmed', value: tasks.filter(t => t.status === 'Confirmed').length.toString(), icon: 'check_circle', color: 'green' },
-                    { label: 'This Week', value: '4', icon: 'date_range', color: 'purple' },
+                    { label: 'High Priority', value: tasks.filter(t => t.priority === 'High').length.toString(), icon: 'priority_high', color: 'red' },
                 ].map((stat, i) => (
                     <div key={i} className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
                         <div className="flex items-center justify-between">
@@ -134,6 +230,12 @@ const Scheduling: React.FC = () => {
                             <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">task</span>
                                 Scheduled Tasks
+                                {isLoadingPrediction && (
+                                    <span className="ml-2 text-xs text-gray-500 flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                                        Updating priorities...
+                                    </span>
+                                )}
                             </h3>
                         </div>
                         <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -148,6 +250,11 @@ const Scheduling: React.FC = () => {
                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPriorityColor(task.priority)}`}>
                                                         {task.priority}
                                                     </span>
+                                                    {mlPriorityEnabled && prediction && task.status === 'Pending' && (
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                                            ML
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{task.description}</p>
                                                 <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -207,6 +314,31 @@ const Scheduling: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* ML Priority Insight */}
+                    {prediction && (
+                        <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="material-symbols-outlined">psychology</span>
+                                <h3 className="font-bold">ML Priority Insight</h3>
+                            </div>
+                            <p className="text-sm text-purple-100 mb-3">
+                                Based on current risk assessment (AERS: {(prediction.aers * 100).toFixed(1)}%),
+                                the model recommends <span className="font-bold">{getPriorityFromAERS(prediction.aers)}</span> priority
+                                for pending infrastructure tasks.
+                            </p>
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-purple-200">Stress Index</span>
+                                <span className="font-bold">{prediction.asi.toFixed(1)}</span>
+                            </div>
+                            <div className="w-full bg-white/20 rounded-full h-2 mt-1">
+                                <div
+                                    className="h-2 rounded-full bg-white transition-all"
+                                    style={{ width: `${prediction.asi}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Quick Actions */}
                     <div className="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                         <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
@@ -238,9 +370,9 @@ const Scheduling: React.FC = () => {
                         </h3>
                         <div className="space-y-4">
                             {[
-                                { name: 'Infrastructure Team', allocated: 85, color: 'blue' },
-                                { name: 'Security Team', allocated: 60, color: 'green' },
-                                { name: 'Database Admins', allocated: 95, color: 'red' },
+                                { name: 'Infrastructure Team', allocated: prediction ? Math.round(prediction.asi * 0.9) : 85, color: 'blue' },
+                                { name: 'Security Team', allocated: prediction ? Math.round(60 + prediction.aers * 30) : 60, color: 'green' },
+                                { name: 'Database Admins', allocated: prediction ? Math.round(prediction.asi) : 95, color: 'red' },
                             ].map((resource, i) => (
                                 <div key={i}>
                                     <div className="flex justify-between items-center mb-1">

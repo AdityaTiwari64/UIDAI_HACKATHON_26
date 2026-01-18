@@ -92,11 +92,47 @@ The UIDAI Data Management Portal is a centralized platform for forecasting, stre
 - **Charts**: Recharts
 - **AI Integration**: Google Gemini API
 - **Icons**: Material Symbols
+- **Backend**: Python Flask
+- **ML Model**: Scikit-learn (GradientBoostingRegressor)
+- **Data Processing**: Pandas, NumPy
+
+## 🧠 ML Model Integration
+
+The system includes a trained ML model for predicting system stress and exclusion risk.
+
+### Core Metrics
+
+| Metric | Formula | Range |
+|--------|---------|-------|
+| **ASI** (Stress Index) | `abs(ml_pred) × 100 + 50` | 0-100 |
+| **AERS** (Risk Score) | `abs(asi_raw × (mbu + rp))` | 0-1 |
+| **MBU** (Minor Biometric) | `c / (b + d)` | 0-1 |
+| **RP** (Rejection Proportion) | `(b - c) / b` | -1 to 1 |
+
+### Timeline Structure
+
+| Period | Date Range | Description |
+|--------|-----------|-------------|
+| Historical | ≤ 2025-12 | Actual CSV data |
+| Current | 2026-01 | Active operational month |
+| Future | Feb-Apr 2026 | 3-month ML forecasts |
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Backend health check |
+| `/metadata` | GET | States, districts, months |
+| `/history` | GET | Time-series data |
+| `/predict` | POST | Single month prediction |
+| `/forecast` | POST | 3-month ahead forecast |
+| `/aggregate` | GET | State-level averages |
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 - Node.js (v18 or higher)
+- Python 3.8+ (for ML backend)
 - npm or yarn
 
 ### Installation
@@ -107,50 +143,70 @@ The UIDAI Data Management Portal is a centralized platform for forecasting, stre
    cd UIDAI_HACKATHON_26
    ```
 
-2. **Install dependencies**
+2. **Install frontend dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure environment variables**
+3. **Install backend dependencies**
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   cd ..
+   ```
+
+4. **Configure environment variables**
    Create a `.env.local` file and add your Gemini API key:
    ```
    GEMINI_API_KEY=your_api_key_here
    ```
 
-4. **Run the development server**
+5. **Start the ML backend** (Terminal 1)
+   ```bash
+   cd backend
+   python app.py
+   ```
+
+6. **Run the frontend dev server** (Terminal 2)
    ```bash
    npm run dev
    ```
 
-5. **Open your browser**
+7. **Open your browser**
    Navigate to `http://localhost:3000`
 
 ## 📁 Project Structure
 
 ```
 UIDAI_HACKATHON_26/
+├── backend/
+│   ├── app.py                  # Flask API server
+│   ├── uidai_risk_model.pkl    # Trained ML model
+│   ├── model_features.pkl      # Feature names
+│   ├── processed_master_data.csv # Dataset
+│   └── requirements.txt        # Python dependencies
 ├── components/
-│   ├── Sidebar.tsx         # Navigation sidebar with emblem
-│   └── StatCard.tsx        # Reusable statistics card
+│   ├── Sidebar.tsx             # Navigation sidebar
+│   └── StatCard.tsx            # Statistics card
 ├── pages/
-│   ├── Dashboard.tsx       # Home dashboard with metrics
-│   ├── StressIndex.tsx     # System stress analysis
-│   ├── Forecasting.tsx     # AI-powered predictions
-│   ├── Scheduling.tsx      # Task scheduling
-│   ├── Dataset.tsx         # Data management
-│   ├── Profile.tsx         # User profile
-│   ├── Settings.tsx        # System settings
-│   └── About.tsx           # About page
+│   ├── Dashboard.tsx           # State aggregate metrics
+│   ├── StressIndex.tsx         # ML-powered stress analysis
+│   ├── Forecasting.tsx         # 3-month timeline forecasting
+│   ├── Scheduling.tsx          # Task scheduling
+│   ├── Dataset.tsx             # Data management
+│   ├── Profile.tsx             # User profile
+│   ├── Settings.tsx            # System settings
+│   └── About.tsx               # About page
 ├── services/
-│   └── geminiService.ts    # Gemini AI integration
-├── screenshots/            # README screenshots
+│   ├── geminiService.ts        # Gemini AI integration
+│   └── apiService.ts           # Flask API client
+├── screenshots/                # README screenshots
 ├── public/
-│   └── emblem.png          # National Emblem
-├── App.tsx                 # Main app component
-├── index.tsx               # Entry point
-├── types.ts                # TypeScript types
-└── index.html              # HTML template
+│   └── emblem.png              # National Emblem
+├── App.tsx                     # Main app component
+├── index.tsx                   # Entry point
+├── types.ts                    # TypeScript types
+└── index.html                  # HTML template
 ```
 
 ## 🔐 Security
