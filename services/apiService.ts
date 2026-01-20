@@ -3,7 +3,8 @@
  * Handles communication between React frontend and Flask ML prediction server
  */
 
-const API_BASE_URL = '/api';
+// Use environment variable for production (Railway), fallback to /api for local dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Input parameters for manual risk prediction

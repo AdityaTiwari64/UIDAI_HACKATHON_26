@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
+CORS(app, origins="*")  # Allow all origins for production (Vercel frontend)
 
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
